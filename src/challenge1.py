@@ -67,11 +67,15 @@ def create_fct_active_users(pivot_date, offset_days, deposit_file, withdrawals_f
                                         (withdrawals['event_tstamp'] <= pivot_date.strftime('%Y-%m-%d'))]
     
     # Add event_type column
-    deposits['event_type'] = 'deposit'
-    withdrawals['event_type'] = 'withdrawal'
+    deposits['event_type'] = 'DEPOSIT'
+    withdrawals['event_type'] = 'WITHDRAWAL'
+
     
     # Concatenate the data
     combined = pd.concat([deposits, withdrawals], ignore_index=True)
+
+    # Trim and uppercase the values in tx_status
+    combined['tx_status'] = combined['tx_status'].str.strip().str.upper()
     
     # Generate rec_code using MD5 hash of tx_id
     combined['rec_code'] = combined['id'].apply(lambda x: hashlib.md5(str(x).encode()).hexdigest())
@@ -106,10 +110,88 @@ def create_fct_active_users(pivot_date, offset_days, deposit_file, withdrawals_f
     merged_df.to_csv(output_file, index=False)
     print(f"Data successfully written to {output_file}")
 
+def create_fct_system_activity(pivot_date, offset_days, event_file, deposit_file, withdrawals_file, output_file):
+    """
+    Create a fact table CSV file with system activity by concatenating events, deposits, and withdrawals data.
+
+    Parameters:
+    pivot_date (str): The pivot date in 'YYYY-MM-DD' format.
+    offset_days (int): The number of days to include before the pivot date.
+    event_file (str): Path to the event CSV file.
+    deposit_file (str): Path to the deposit CSV file.
+    withdrawals_file (str): Path to the withdrawals CSV file.
+    output_file (str): Path to the output CSV file.
+    """
+    # Convert pivot_date to datetime
+    pivot_date = datetime.strptime(pivot_date, '%Y-%m-%d')
+    start_date = pivot_date - timedelta(days=offset_days)
+    
+    # Read the CSV files
+    events = pd.read_csv(event_file)
+    deposits = pd.read_csv(deposit_file)
+    withdrawals = pd.read_csv(withdrawals_file)
+    
+    # Rename event_timestamp to event_tstamp
+    events.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
+    deposits.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
+    withdrawals.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
+    
+    # Add event_type and event_status columns
+    events['event_type'] = events['event_name']
+    events['event_status'] = 'COMPLETED'
+    deposits['event_type'] = 'deposit'
+    deposits['event_status'] = deposits['tx_status']
+    withdrawals['event_type'] = 'withdrawal'
+    withdrawals['event_status'] = withdrawals['tx_status']
+    
+    # Concatenate the data
+    combined = pd.concat([events[['id', 'user_id', 'event_tstamp', 'event_type', 'event_status']],
+                          deposits[['id', 'user_id', 'event_tstamp', 'event_type', 'event_status']],
+                          withdrawals[['id', 'user_id', 'event_tstamp', 'event_type', 'event_status']]],
+                         ignore_index=True)
+    
+    # Trim and uppercase the values in event_status and event_type
+    combined['event_status'] = combined['event_status'].str.strip().str.upper()
+    combined['event_type'] = combined['event_type'].str.strip().str.upper()
+    
+    # Generate rec_code using MD5 hash of concatenated id and event_type
+    combined['rec_code'] = combined.apply(lambda row: hashlib.md5((str(row['id']) + row['event_type']).encode()).hexdigest(), axis=1)
+    
+    # Add created_at column with the current timestamp
+    combined['created_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Rename columns to match the required output
+    combined = combined.rename(columns={'id': 'event_id'})
+    
+    # Select and reorder columns
+    final_df = combined[['rec_code', 'user_id', 'event_id', 'event_tstamp', 'event_type', 'event_status', 'created_at']]
+    
+    # Check if the output file exists
+    if os.path.exists(output_file):
+        existing_df = pd.read_csv(output_file)
+        
+        # If the file exists, filter based on pivot_date and offset_days
+        if not existing_df.empty:
+            combined = combined[(combined['event_tstamp'] >= start_date.strftime('%Y-%m-%d')) &
+                                (combined['event_tstamp'] <= pivot_date.strftime('%Y-%m-%d'))]
+        
+        # Merge existing data with the new data
+        merged_df = pd.merge(existing_df, final_df, on='rec_code', how='outer', suffixes=('_old', ''))
+        
+        # Drop duplicate columns created by merge (keep the new ones)
+        for col in ['user_id', 'event_id', 'event_tstamp', 'event_type', 'event_status', 'created_at']:
+            merged_df[col] = merged_df[col].combine_first(merged_df[col + '_old'])
+            merged_df.drop(columns=[col + '_old'], inplace=True)
+    else:
+        merged_df = final_df
+
+    # Write to the output file
+    merged_df.to_csv(output_file, index=False)
+    print(f"Data successfully written to {output_file}")
+
 
 download_data()
 
-# Example usage
 pivot_date = "2024-07-01"
 offset_days = 30
 deposit_file = "data/input/deposit_sample_data.csv"
@@ -117,3 +199,13 @@ withdrawals_file = "data/input/withdrawals_sample_data.csv"
 output_file = "data/output/fct_active_users.csv"
 
 create_fct_active_users(pivot_date, offset_days, deposit_file, withdrawals_file, output_file)
+
+
+pivot_date = "2024-07-01"
+offset_days = 30
+event_file = "data/input/event_sample_data.csv"
+deposit_file = "data/input/deposit_sample_data.csv"
+withdrawals_file = "data/input/withdrawals_sample_data.csv"
+output_file = "data/output/fct_system_activity.csv"
+
+create_fct_system_activity(pivot_date, offset_days, event_file, deposit_file, withdrawals_file, output_file)
