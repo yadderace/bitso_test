@@ -312,6 +312,9 @@ def create_dim_users(pivot_date, offset_days, activity_file, user_id_file, outpu
     dim_users.to_csv(output_file, index=False)
     print(f"Data successfully written to {output_file}")
 
+def zip_directory(input_directory, output_file):
+    print('Creating output.zip')
+    utils.zip_directory_with_limit(input_directory, output_file, size_limit=(100 * 1024 * 1024))  # 100 MB size limit per zip file
 
 download_data()
 
@@ -340,3 +343,6 @@ user_id_file = "data/input/user_id_sample_data.csv"
 output_file = "data/output/dim_users.csv"
 
 create_dim_users(pivot_date, offset_days, activity_file, user_id_file, output_file)
+
+
+zip_directory('data/output', 'data/zip/output.zip')

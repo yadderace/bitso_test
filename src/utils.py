@@ -72,3 +72,40 @@ def get_first_last_timestamps(df, event_type):
     if not timestamps.empty:
         return timestamps.min(), timestamps.max()
     return None, None
+
+def zip_directory_with_limit(directory_path, output_zip_base, size_limit):
+    """
+    Zips all the contents of a directory into multiple zip files if necessary to respect the size limit.
+
+    Parameters:
+    directory_path (str): Path to the directory to be zipped.
+    output_zip_base (str): Base name for the output zip files.
+    size_limit (int): Size limit for each zip file in bytes.
+    """
+    def get_zip_file_name(base_name, index):
+        return f"{base_name}_{index}.zip"
+    
+    current_zip_index = 1
+    current_zip_file = get_zip_file_name(output_zip_base, current_zip_index)
+    current_zip_size = 0
+
+    with zf.ZipFile(current_zip_file, 'w', zf.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(directory_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, directory_path)
+                
+                file_size = os.path.getsize(file_path)
+                
+                # Check if adding this file would exceed the size limit
+                if current_zip_size + file_size > size_limit:
+                    # Close the current zip file and start a new one
+                    zipf.close()
+                    current_zip_index += 1
+                    current_zip_file = get_zip_file_name(output_zip_base, current_zip_index)
+                    zipf = zf.ZipFile(current_zip_file, 'w', zf.ZIP_DEFLATED)
+                    current_zip_size = 0
+                
+                # Add the file to the current zip file
+                zipf.write(file_path, arcname)
+                current_zip_size += file_size
