@@ -55,3 +55,20 @@ def download_and_unzip_file(url, output_dir):
         print(f"Failed to download {url}: {e}")
     except zf.BadZipFile as e:
         print(f"Failed to unzip {url}: {e}")
+
+def get_first_last_timestamps(df, event_type):
+    """
+    Get the first and last timestamps for a specified event type from a DataFrame.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the event data.
+    event_type (str): The event type to filter by.
+
+    Returns:
+    tuple: A tuple containing the first and last timestamps for the specified event type.
+           Returns (None, None) if no timestamps are found for the specified event type.
+    """
+    timestamps = df[df['event_type'] == event_type]['event_tstamp']
+    if not timestamps.empty:
+        return timestamps.min(), timestamps.max()
+    return None, None

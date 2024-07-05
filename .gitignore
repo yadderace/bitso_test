@@ -163,7 +163,7 @@ cython_debug/
 #.idea/
 
 # Data Stored
-data/
+data/input/
 
 # DS_Store
 .DS_Store
