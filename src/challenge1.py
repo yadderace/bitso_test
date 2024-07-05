@@ -150,6 +150,9 @@ def create_fct_system_activity(pivot_date, offset_days, event_file, deposit_file
     events.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
     deposits.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
     withdrawals.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
+
+    # Just filtering login events
+    events = events[events['event_name'] == 'login']
     
     # Add event_type and event_status columns
     events['event_type'] = events['event_name']
@@ -282,13 +285,14 @@ def create_dim_users(pivot_date, offset_days, activity_file, user_id_file, outpu
     # If the output file exists, merge/update the stored records
     if os.path.exists(output_file):
         existing_df = pd.read_csv(output_file)
+
+        # Cast specific columns to datetime
+        existing_df[timestamp_columns] = existing_df[timestamp_columns].apply(pd.to_datetime, errors='coerce')
         
         print("Merging existing data with the new data...")
         # Merge existing data with the new data
         merged_df = pd.merge(existing_df, dim_users, on='rec_code', how='outer', suffixes=('_old', ''))
-        print(merged_df.dtypes)
-        print(existing_df.dtypes)
-        print(dim_users.dtypes)
+        
         # Combine first/last timestamps ensuring min/max values are kept
         for col in ['first_login_tstamp', 'first_deposit_tstamp', 'first_withdrawal_tstamp']:
             merged_df[col] = merged_df[[col, col + '_old']].min(axis=1)
