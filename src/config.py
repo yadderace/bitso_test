@@ -2,6 +2,7 @@
 INPUT_DIR = 'data/input'
 OUTPUT_DIR = 'data/output'
 SANDBOX_DIR = 'data/sandbox'
+PARTITIONED_DIR = 'data/s3-partitioned'
 
 # URLs Sources
 CSV_URLs = ['https://raw.githubusercontent.com/IMARVI/sr_de_challenge/main/event_sample_data.csv',
