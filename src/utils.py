@@ -1,7 +1,11 @@
 import requests
 import os
 import zipfile as zf
+import config
+from bitsoauth import BitsoAuth
 from io import BytesIO
+
+auth = BitsoAuth('CHdnmGzyOc', '8dc45c646ffe9159b91a2051de7cb75a')
 
 def download_file(url, output_dir):
     """
@@ -109,3 +113,25 @@ def zip_directory_with_limit(directory_path, output_zip_base, size_limit):
                 # Add the file to the current zip file
                 zipf.write(file_path, arcname)
                 current_zip_size += file_size
+
+def list_order_book(book):
+    """
+    Fetches the order book for a given book from the Bitso API.
+
+    Args:
+        book (str): The book for which to fetch the order book.
+
+    Returns:
+        dict: The JSON response from the Bitso API if the request is successful.
+
+    Raises:
+        Exception: If the request fails.
+    """
+    url = f"{config.API_ORDER_BOOK}?book={book}"
+    response = requests.get(url, auth=auth)
+    
+    if response.status_code == 200:
+        return response.json()
+    else:
+        raise Exception(f"Failed to get open orders: {response.status_code}, {response.text}")
+

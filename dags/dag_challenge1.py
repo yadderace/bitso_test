@@ -4,10 +4,8 @@ from datetime import datetime, timedelta
 import sys
 import os
 
-# Add the path to your project directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-# Import your functions from the challenge1.py script
 from src.challenge1 import download_data, create_fct_active_users, create_fct_system_activity, create_dim_users
 
 # Define default arguments
@@ -57,5 +55,4 @@ with DAG(
         op_args=["2024-07-01", 30, "data/output/fct_system_activity.csv", "data/input/user_id_sample_data.csv", "data/output/dim_users.csv"],
     )
 
-    # Set task dependencies
     task_download_data >> [task_create_fct_active_users, task_create_fct_system_activity] >> task_create_dim_users

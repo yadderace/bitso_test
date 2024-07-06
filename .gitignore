@@ -164,8 +164,8 @@ cython_debug/
 
 # Data Stored
 data/input/*
-
 data/output/*
+data/sandbox/*
 
 # DS_Store
 .DS_Store
