@@ -1,348 +1,132 @@
-import config
-import utils
-import pandas as pd
 import os
-import hashlib
-from datetime import datetime, timedelta
+import json
+import utils
+import config
+import time
+import asyncio
+import pandas as pd
 
-def download_data():
+from datetime import datetime
+
+async def process_books(books, output_dir = config.SANDBOX_DIR):
     """
-    Downloads multiple files from predefined URLs and saves them to a specified directory.
+    Processes a list of books, fetches their order books, and stores the results in JSON files.
 
-    Modify the `CSV_URLs` and `ZIP_URLs` lists in config.py to add or remove URLs as needed.
+    Args:
+        books (list): List of book strings to process.
+        output_dir (str): The directory where the JSON files will be stored.
 
-    This function calls `download_file` and `download_and_unzip_file` for each URL in the `urls` list.
+    Returns:
+        None
     """
-    print("Starting data download...")
-
-    # Define URLs and output directory for CSV files
-    csv_urls = config.CSV_URLs
-    output_dir = config.INPUT_DIR  # Adjust the path as per your project structure
-
-    # Download each file
-    for url in csv_urls:
-        print(f"Downloading CSV file from {url}...")
-        utils.download_file(url, output_dir)
-        print(f"Downloaded CSV file from {url}.")
-
-    # Define URLs and output directory for zipped files
-    zip_urls = config.ZIP_URLs
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
     
-    # Download each file
-    for url in zip_urls:
-        print(f"Downloading and unzipping file from {url}...")
-        utils.download_and_unzip_file(url, output_dir)
-        print(f"Downloaded and unzipped file from {url}.")
+    # Getting the timestamp when the process starts
+    timestamp = datetime.now()        
+    
+    for book in books:
+        print(f"Processing book: {book}")
+        try:
+            data = utils.list_order_book(book)
+            payload = data['payload']
+            
+            # Extract the best bid and ask prices
+            best_bid = max(payload['bids'], key=lambda x: float(x['price']))
+            best_ask = min(payload['asks'], key=lambda x: float(x['price']))
+            
+            # Calculate the spread
+            spread = (float(best_ask['price']) - float(best_bid['price'])) * 100 / float(best_ask['price'])
+            
+            # Prepare the JSON data
+            orderbook_timestamp = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            json_data = {
+                'orderbook_timestamp': orderbook_timestamp,
+                'book': book,
+                'bid': float(best_bid['price']),
+                'ask': float(best_ask['price']),
+                'spread': spread
+            }
+            
+            # Create the JSON file
+            filename = f"{book}-{timestamp.strftime('%Y%m%d_%H%M%S')}.json"
+            file_path = os.path.join(output_dir, filename)
+            
+            with open(file_path, 'w') as json_file:
+                json.dump(json_data, json_file)
+            
+            print(f"Successfully processed and saved data for book: {book}")
+        except Exception as e:
+            print(f"Error processing book {book}: {e}")
 
-    print("Data download completed.")
 
-def create_fct_active_users(pivot_date, offset_days, deposit_file, withdrawals_file, output_file):
+def json_to_partitioned_file(books, input_dir = config.SANDBOX_DIR, output_dir = config.PARTITIONED_DIR, format_type = 'csv'):
     """
-    Create a fact table CSV file with active users transactions by concatenating deposit and withdrawals data.
-
+    Reads JSON files from the input directory, converts them to a DataFrame, and writes them to a specified format 
+    (CSV or Parquet) in a partitioned directory structure based on the book and date.
+    
     Parameters:
-    pivot_date (str): The pivot date in 'YYYY-MM-DD' format.
-    offset_days (int): The number of days to include before the pivot date.
-    deposit_file (str): Path to the deposit CSV file.
-    withdrawals_file (str): Path to the withdrawals CSV file.
-    output_file (str): Path to the output CSV file.
+    - books (list): List of books (strings).
+    - input_dir (str): Directory where the JSON files are located.
+    - output_dir (str): Directory where the output files should be saved.
+    - format_type (str): Format type to store the file, either 'csv' or 'parquet'.
     """
-    print("Starting creation of active users fact table...")
-
-    # Convert pivot_date to datetime
-    pivot_date = datetime.strptime(pivot_date, '%Y-%m-%d')
-    start_date = pivot_date - timedelta(days=offset_days)
+    if format_type not in ["csv", "parquet"]:
+        raise ValueError("format_type must be either 'csv' or 'parquet'")
     
-    print(f"Reading deposits from {deposit_file}...")
-    deposits = pd.read_csv(deposit_file)
-    print(f"Reading withdrawals from {withdrawals_file}...")
-    withdrawals = pd.read_csv(withdrawals_file)
+    for book in books:
+        print(f"Processing book: {book}")
+        data = []
 
-    # Rename event_timestamp to event_tstamp
-    deposits.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
-    withdrawals.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
-    
-    # Check if the output file exists
-    fct_file_exist = os.path.exists(output_file)
+        # Collect all JSON files for the current book
+        json_files = [f for f in os.listdir(input_dir) if f.startswith(book) and f.endswith('.json')]
 
-    # If file doesn't exist, it will use all the data.
-    if fct_file_exist:
-        print("Filtering data based on pivot_date and offset_days...")
-        deposits = deposits[(deposits['event_tstamp'] >= start_date.strftime('%Y-%m-%d')) &
-                            (deposits['event_tstamp'] <= pivot_date.strftime('%Y-%m-%d'))]
-        
-        withdrawals = withdrawals[(withdrawals['event_tstamp'] >= start_date.strftime('%Y-%m-%d')) &
-                                  (withdrawals['event_tstamp'] <= pivot_date.strftime('%Y-%m-%d'))]
-    
-    # Add event_type column
-    deposits['event_type'] = 'DEPOSIT'
-    withdrawals['event_type'] = 'WITHDRAWAL'
+        for file_name in json_files:
+            file_path = os.path.join(input_dir, file_name)
+            print(f"Reading file: {file_path}")
+            with open(file_path, 'r') as f:
+                record = json.load(f)
+                data.append(record)
 
-    print("Concatenating deposit and withdrawal data...")
-    # Concatenate the data
-    combined = pd.concat([deposits, withdrawals], ignore_index=True)
+        if data:
+            # Create DataFrame
+            df = pd.DataFrame(data)
 
-    # Trim and uppercase the values in tx_status
-    combined['tx_status'] = combined['tx_status'].str.strip().str.upper()
-    
-    # Generate rec_code using MD5 hash of tx_id
-    combined['rec_code'] = combined['id'].apply(lambda x: hashlib.md5(str(x).encode()).hexdigest())
-    
-    # Add created_at column with the current timestamp
-    combined['created_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    # Rename columns to match the required output
-    combined = combined.rename(columns={
-        'id': 'tx_id',
-        'tx_status': 'event_status'
-    })
-    
-    # Select and reorder columns
-    final_df = combined[['rec_code', 'user_id', 'tx_id', 'event_tstamp', 'event_type', 
-                         'event_status', 'currency', 'amount', 'created_at']]
-    
-    print("Checking if the output file exists...")
-    # Check if the output file exists
-    if fct_file_exist:
-        existing_df = pd.read_csv(output_file)
-        print("Merging existing data with the new data...")
-        # Merge existing data with the new data
-        merged_df = pd.merge(existing_df, final_df, on='rec_code', how='outer', suffixes=('_old', ''))
-        
-        # Drop duplicate columns created by merge (keep the new ones)
-        for col in ['user_id', 'tx_id', 'event_tstamp', 'event_type', 'event_status', 'currency', 'amount', 'created_at']:
-            merged_df[col] = merged_df[col].combine_first(merged_df[col + '_old'])
-            merged_df.drop(columns=[col + '_old'], inplace=True)
-    else:
-        merged_df = final_df
+            # Extract date from the orderbook_timestamp for partitioning
+            df['date'] = pd.to_datetime(df['orderbook_timestamp']).dt.date
 
-    print(f"Writing merged data to {output_file}...")
-    # Write to the output file
-    merged_df.to_csv(output_file, index=False)
-    print(f"Data successfully written to {output_file}")
+            # Define the output path
+            for date in df['date'].unique():
+                date_str = date.strftime("%Y-%m-%d")
+                partitioned_output_dir = os.path.join(output_dir, f"book={book}", f"date={date_str}")
+                os.makedirs(partitioned_output_dir, exist_ok=True)
+                
+                partitioned_file_path = os.path.join(partitioned_output_dir, f"{book}.{format_type}")
 
-def create_fct_system_activity(pivot_date, offset_days, event_file, deposit_file, withdrawals_file, output_file):
-    """
-    Create a fact table CSV file with system activity by concatenating events, deposits, and withdrawals data.
+                print(f"Writing to: {partitioned_file_path}")
 
-    Parameters:
-    pivot_date (str): The pivot date in 'YYYY-MM-DD' format.
-    offset_days (int): The number of days to include before the pivot date.
-    event_file (str): Path to the event CSV file.
-    deposit_file (str): Path to the deposit CSV file.
-    withdrawals_file (str): Path to the withdrawals CSV file.
-    output_file (str): Path to the output CSV file.
-    """
-    print("Starting creation of system activity fact table...")
+                if format_type == "parquet":
+                    df[df['date'] == date].to_parquet(partitioned_file_path, index=False)
+                elif format_type == "csv":
+                    df[df['date'] == date].to_csv(partitioned_file_path, index=False)
 
-    # Convert pivot_date to datetime
-    pivot_date = datetime.strptime(pivot_date, '%Y-%m-%d')
-    start_date = pivot_date - timedelta(days=offset_days)
-    
-    print(f"Reading events from {event_file}...")
-    events = pd.read_csv(event_file)
-    print(f"Reading deposits from {deposit_file}...")
-    deposits = pd.read_csv(deposit_file)
-    print(f"Reading withdrawals from {withdrawals_file}...")
-    withdrawals = pd.read_csv(withdrawals_file)
-    
-    # Rename event_timestamp to event_tstamp
-    events.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
-    deposits.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
-    withdrawals.rename(columns={'event_timestamp': 'event_tstamp'}, inplace=True)
+            # Remove processed JSON files
+            for file_name in json_files:
+                file_path = os.path.join(input_dir, file_name)
+                print(f"Deleting file: {file_path}")
+                os.remove(file_path)
 
-    # Just filtering login events
-    events = events[events['event_name'] == 'login']
-    
-    # Add event_type and event_status columns
-    events['event_type'] = events['event_name']
-    events['event_status'] = 'COMPLETED'
-    deposits['event_type'] = 'DEPOSIT'
-    deposits['event_status'] = deposits['tx_status']
-    withdrawals['event_type'] = 'WITHDRAWAL'
-    withdrawals['event_status'] = withdrawals['tx_status']
-    
-    print("Concatenating events, deposits, and withdrawals data...")
-    # Concatenate the data
-    combined = pd.concat([events[['id', 'user_id', 'event_tstamp', 'event_type', 'event_status']],
-                          deposits[['id', 'user_id', 'event_tstamp', 'event_type', 'event_status']],
-                          withdrawals[['id', 'user_id', 'event_tstamp', 'event_type', 'event_status']]],
-                         ignore_index=True)
-    
-    # Trim and uppercase the values in event_status and event_type
-    combined['event_status'] = combined['event_status'].str.strip().str.upper()
-    combined['event_type'] = combined['event_type'].str.strip().str.upper()
-    
-    # Generate rec_code using MD5 hash of concatenated id and event_type
-    combined['rec_code'] = combined.apply(lambda row: hashlib.md5((str(row['id']) + row['event_type']).encode()).hexdigest(), axis=1)
-    
-    # Add created_at column with the current timestamp
-    combined['created_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    # Rename columns to match the required output
-    combined = combined.rename(columns={'id': 'event_id'})
-    
-    # Select and reorder columns
-    final_df = combined[['rec_code', 'user_id', 'event_id', 'event_tstamp', 'event_type', 'event_status', 'created_at']]
-    
-    print("Checking if the output file exists...")
-    # Check if the output file exists
-    if os.path.exists(output_file):
-        existing_df = pd.read_csv(output_file)
-        
-        # If the file exists, filter based on pivot_date and offset_days
-        if not existing_df.empty:
-            combined = combined[(combined['event_tstamp'] >= start_date.strftime('%Y-%m-%d')) &
-                                (combined['event_tstamp'] <= pivot_date.strftime('%Y-%m-%d'))]
-        
-        print("Merging existing data with the new data...")
-        # Merge existing data with the new data
-        merged_df = pd.merge(existing_df, final_df, on='rec_code', how='outer', suffixes=('_old', ''))
-        
-        # Drop duplicate columns created by merge (keep the new ones)
-        for col in ['user_id', 'event_id', 'event_tstamp', 'event_type', 'event_status', 'created_at']:
-            merged_df[col] = merged_df[col].combine_first(merged_df[col + '_old'])
-            merged_df.drop(columns=[col + '_old'], inplace=True)
-    else:
-        merged_df = final_df
-
-    print(f"Writing merged data to {output_file}...")
-    # Write to the output file
-    merged_df.to_csv(output_file, index=False)
-    print(f"Data successfully written to {output_file}")
-
-def create_dim_users(pivot_date, offset_days, activity_file, user_id_file, output_file):
-    """
-    Create a dimension table CSV file for users by extracting and summarizing data from system activity and user ID files.
-
-    Parameters:
-    pivot_date (str): The pivot date in 'YYYY-MM-DD' format.
-    offset_days (int): The number of days to include before the pivot date.
-    activity_file (str): Path to the system activity CSV file.
-    user_id_file (str): Path to the user ID CSV file.
-    output_file (str): Path to the output CSV file.
-    """
-    print("Starting creation of users dimension table...")
-
-    # Convert pivot_date to datetime
-    pivot_date = datetime.strptime(pivot_date, '%Y-%m-%d')
-    start_date = pivot_date - timedelta(days=offset_days)
-    
-    print(f"Reading activity data from {activity_file}...")
-    activity_df = pd.read_csv(activity_file)
-    print(f"Reading user ID data from {user_id_file}...")
-    user_id_df = pd.read_csv(user_id_file)
-    
-    print("Filtering activity data based on pivot_date and offset_days if the final file exists...")
-    # Filter activity data based on pivot_date and offset_days if the final file exists
-    if os.path.exists(output_file):
-        existing_df = pd.read_csv(output_file)
-        if not existing_df.empty:
-            activity_df = activity_df[(activity_df['event_tstamp'] >= start_date.strftime('%Y-%m-%d')) &
-                                      (activity_df['event_tstamp'] <= pivot_date.strftime('%Y-%m-%d'))]
-
-    # Get all unique user_ids from both files
-    all_user_ids = pd.concat([activity_df['user_id'], user_id_df['user_id']]).unique()
-    
-    # Initialize the dim_users DataFrame
-    dim_users = pd.DataFrame(all_user_ids, columns=['user_id'])
-    
-    # Generate rec_code using MD5 hash of user_id
-    dim_users['rec_code'] = dim_users['user_id'].apply(lambda x: hashlib.md5(str(x).encode()).hexdigest())
-
-    print("Calculating first and last event timestamps for logins, deposits, and withdrawals...")
-    # Group by user_id and calculate min and max event_tstamp for logins
-    result_df = activity_df[activity_df['event_type'] == 'LOGIN'].groupby('user_id')['event_tstamp'].agg(['min', 'max']).reset_index()
-    # Rename columns for clarity
-    result_df.columns = ['user_id', 'first_login_tstamp', 'last_login_tstamp']
-    # Full outer join info with dim_users
-    dim_users = pd.merge(dim_users, result_df, on='user_id', how='outer')
-
-    # Group by user_id and calculate min and max event_tstamp for deposits
-    result_df = activity_df[activity_df['event_type'] == 'DEPOSIT'].groupby('user_id')['event_tstamp'].agg(['min', 'max']).reset_index()
-    # Rename columns for clarity
-    result_df.columns = ['user_id', 'first_deposit_tstamp', 'last_deposit_tstamp']
-    # Full outer join info with dim_users
-    dim_users = pd.merge(dim_users, result_df, on='user_id', how='outer')
-    
-    # Group by user_id and calculate min and max event_tstamp for withdrawals
-    result_df = activity_df[activity_df['event_type'] == 'WITHDRAWAL'].groupby('user_id')['event_tstamp'].agg(['min', 'max']).reset_index()
-    # Rename columns for clarity
-    result_df.columns = ['user_id', 'first_withdrawal_tstamp', 'last_withdrawal_tstamp']
-    # Full outer join info with dim_users
-    dim_users = pd.merge(dim_users, result_df, on='user_id', how='outer')
-
-    # Add created_at column with the current timestamp
-    dim_users['created_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    # List of columns to cast to datetime
-    timestamp_columns = ['first_login_tstamp', 'last_login_tstamp', 'first_deposit_tstamp', 'last_deposit_tstamp', 'first_withdrawal_tstamp', 'last_withdrawal_tstamp',]
-
-    # Cast specific columns to datetime
-    dim_users[timestamp_columns] = dim_users[timestamp_columns].apply(pd.to_datetime, errors='coerce')
-
-    print("Checking if the output file exists...")
-    # If the output file exists, merge/update the stored records
-    if os.path.exists(output_file):
-        existing_df = pd.read_csv(output_file)
-
-        # Cast specific columns to datetime
-        existing_df[timestamp_columns] = existing_df[timestamp_columns].apply(pd.to_datetime, errors='coerce')
-        
-        print("Merging existing data with the new data...")
-        # Merge existing data with the new data
-        merged_df = pd.merge(existing_df, dim_users, on='rec_code', how='outer', suffixes=('_old', ''))
-        
-        # Combine first/last timestamps ensuring min/max values are kept
-        for col in ['first_login_tstamp', 'first_deposit_tstamp', 'first_withdrawal_tstamp']:
-            merged_df[col] = merged_df[[col, col + '_old']].min(axis=1)
-        
-        for col in ['last_login_tstamp', 'last_deposit_tstamp', 'last_withdrawal_tstamp']:
-            merged_df[col] = merged_df[[col, col + '_old']].max(axis=1)
-        
-        # Drop duplicate columns created by merge (keep the new ones)
-        for col in ['user_id', 'created_at']:
-            merged_df[col] = merged_df[col].combine_first(merged_df[col + '_old'])
-            merged_df.drop(columns=[col + '_old'], inplace=True)
-        
-        dim_users = merged_df
-
-    print(f"Writing merged data to {output_file}...")
-    # Write to the output file
-    dim_users.to_csv(output_file, index=False)
-    print(f"Data successfully written to {output_file}")
-
-def zip_directory(input_directory, output_file):
-    print('Creating output.zip')
-    utils.zip_directory_with_limit(input_directory, output_file, size_limit=(100 * 1024 * 1024))  # 100 MB size limit per zip file
-
-download_data()
-
-pivot_date = "2024-07-01"
-offset_days = 30
-deposit_file = "data/input/deposit_sample_data.csv"
-withdrawals_file = "data/input/withdrawals_sample_data.csv"
-output_file = "data/output/fct_active_users.csv"
-
-create_fct_active_users(pivot_date, offset_days, deposit_file, withdrawals_file, output_file)
+        print(f"Finished processing book: {book}")
 
 
-pivot_date = "2024-07-01"
-offset_days = 30
-event_file = "data/input/event_sample_data.csv"
-deposit_file = "data/input/deposit_sample_data.csv"
-withdrawals_file = "data/input/withdrawals_sample_data.csv"
-output_file = "data/output/fct_system_activity.csv"
+# async def main():
+#     for i in range(10):
+#         print(f"Execution {i + 1} of {10}")
+#         await process_books(['btc_mxn', 'usd_mxn'], 'data/sandbox')
+#         if (i < 10 - 1):
+#             await asyncio.sleep(1)
 
-create_fct_system_activity(pivot_date, offset_days, event_file, deposit_file, withdrawals_file, output_file)
+# # Run the async main function
+# asyncio.run(main())
 
-pivot_date = "2024-07-01"
-offset_days = 30
-activity_file = "data/output/fct_system_activity.csv"
-user_id_file = "data/input/user_id_sample_data.csv"
-output_file = "data/output/dim_users.csv"
-
-create_dim_users(pivot_date, offset_days, activity_file, user_id_file, output_file)
-
-
-zip_directory('data/output', 'data/zip/output.zip')
+json_to_partitioned_file(['btc_mxn', 'usd_mxn'], input_dir='data/sandbox', output_dir='data/s3-partitioned', format_type='parquet')

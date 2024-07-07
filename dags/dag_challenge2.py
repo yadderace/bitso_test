@@ -1,94 +1,58 @@
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from datetime import datetime, timedelta
-import asyncio
-import json
+import sys
 import os
-import pandas as pd
-import config
 
-from src.challenge2 import process_books, json_to_partitioned_file
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
+from src.challenge2 import download_data, create_fct_active_users, create_fct_system_activity, create_dim_users
 
 # Define default arguments
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2023, 1, 1),
+    'start_date': datetime(2024, 7, 1),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
     'retry_delay': timedelta(minutes=5),
 }
 
-# Define the DAG with params
-dag = DAG(
-    'book_processing_dag',
+# Define the DAG
+with DAG(
+    'daily_data_processing',
     default_args=default_args,
-    description='A DAG to process books every ten minutes',
-    schedule_interval='*/10 * * * *',
+    description='A simple data processing DAG',
+    schedule_interval=timedelta(days=1),
     catchup=False,
-    params={
-        'sleep_time': config.ARG_SLEEP_TIME,  
-        'execution_count': config.ARG_EXECUTION_COUNT, 
-        'book_list': config.ARG_BOOK_LIST 
-    }
-)
+) as dag:
 
-# Function to run process_books with parameters
-async def run_process_books(books, sleep_time, execution_count):
-    for _ in range(execution_count):
-        await process_books(books)
-        await asyncio.sleep(sleep_time)
+    # Task to download data
+    task_download_data = PythonOperator(
+        task_id='download_data',
+        python_callable=download_data,
+    )
 
-# Validate and run process_books
-def process_books_task(**kwargs):
-    params = kwargs['params']
-    
-    # Validate parameters
-    try:
-        sleep_time = int(params['sleep_time'])
-        execution_count = int(params['execution_count'])
-        books = json.loads(params['book_list'])
-        
-        if not isinstance(books, list):
-            raise ValueError("book_list must be a JSON string representing a list.")
-        
-    except (ValueError, TypeError, json.JSONDecodeError) as e:
-        raise ValueError(f"Invalid parameter format: {e}")
+    # Task to create fct_active_users
+    task_create_fct_active_users = PythonOperator(
+        task_id='create_fct_active_users',
+        python_callable=create_fct_active_users,
+        op_args=["2024-07-01", 30, "data/input/deposit_sample_data.csv", "data/input/withdrawals_sample_data.csv", "data/output/fct_active_users.csv"],
+    )
 
-    # Execute the async function
-    asyncio.run(run_process_books(books, sleep_time, execution_count))
+    # Task to create fct_system_activity
+    task_create_fct_system_activity = PythonOperator(
+        task_id='create_fct_system_activity',
+        python_callable=create_fct_system_activity,
+        op_args=["2024-07-01", 30, "data/input/event_sample_data.csv", "data/input/deposit_sample_data.csv", "data/input/withdrawals_sample_data.csv", "data/output/fct_system_activity.csv"],
+    )
 
-process_books_operator = PythonOperator(
-    task_id='process_books_task',
-    python_callable=process_books_task,
-    provide_context=True,
-    dag=dag,
-)
+    # Task to create dim_users
+    task_create_dim_users = PythonOperator(
+        task_id='create_dim_users',
+        python_callable=create_dim_users,
+        op_args=["2024-07-01", 30, "data/output/fct_system_activity.csv", "data/input/user_id_sample_data.csv", "data/output/dim_users.csv"],
+    )
 
-# Validate and run json_to_partitioned_file
-def partition_files_task(**kwargs):
-    params = kwargs['params']
-    
-    # Validate parameters
-    try:
-        books = json.loads(params['book_list'])
-        
-        if not isinstance(books, list):
-            raise ValueError("book_list must be a JSON string representing a list.")
-        
-    except (ValueError, TypeError, json.JSONDecodeError) as e:
-        raise ValueError(f"Invalid parameter format: {e}")
-
-    # Execute the function
-    json_to_partitioned_file(books)
-
-partition_files_operator = PythonOperator(
-    task_id='partition_files_task',
-    python_callable=partition_files_task,
-    provide_context=True,
-    dag=dag,
-)
-
-# Set task dependencies
-process_books_operator >> partition_files_operator
+    task_download_data >> [task_create_fct_active_users, task_create_fct_system_activity] >> task_create_dim_users
