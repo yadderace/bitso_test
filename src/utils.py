@@ -4,8 +4,17 @@ import zipfile as zf
 import config
 from bitsoauth import BitsoAuth
 from io import BytesIO
+import configparser
 
-auth = BitsoAuth('CHdnmGzyOc', '8dc45c646ffe9159b91a2051de7cb75a')
+# Create a configparser object
+config = configparser.ConfigParser()
+# Read the .ini file
+config.read('config.ini')
+# Accessing values
+api_key = config.get('bitso', 'api_key')
+api_secret = config.get('bitso', 'api_secret')
+
+auth = BitsoAuth(api_key, api_secret)
 
 def download_file(url, output_dir):
     """

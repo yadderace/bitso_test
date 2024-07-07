@@ -167,5 +167,8 @@ data/input/*
 data/output/*
 data/sandbox/*
 
+# Configuration file
+src/config.ini
+
 # DS_Store
 .DS_Store
