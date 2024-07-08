@@ -308,6 +308,8 @@ def create_dim_users(pivot_date, offset_days, activity_file, user_id_file, outpu
         for col in ['user_id', 'created_at']:
             merged_df[col] = merged_df[col].combine_first(merged_df[col + '_old'])
             merged_df.drop(columns=[col + '_old'], inplace=True)
+
+        merged_df.drop(columns=['first_login_tstamp_old', 'first_deposit_tstamp_old', 'first_withdrawal_tstamp_old', 'last_login_tstamp_old', 'last_deposit_tstamp_old', 'last_withdrawal_tstamp_old'], inplace=True)
         
         dim_users = merged_df
 
