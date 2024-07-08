@@ -110,13 +110,22 @@ def create_fct_active_users(pivot_date, offset_days, deposit_file, withdrawals_f
     if fct_file_exist:
         existing_df = pd.read_csv(output_file)
         print("Merging existing data with the new data...")
+        
+        existing_filtered_df = existing_df[(existing_df['event_tstamp'] >= start_date.strftime('%Y-%m-%d')) &
+                                               (existing_df['event_tstamp'] <= pivot_date.strftime('%Y-%m-%d'))]
+            
+        out_filtered_df = existing_df[(existing_df['event_tstamp'] < start_date.strftime('%Y-%m-%d')) |
+                                               (existing_df['event_tstamp'] > pivot_date.strftime('%Y-%m-%d'))]
+        
         # Merge existing data with the new data
-        merged_df = pd.merge(existing_df, final_df, on='rec_code', how='outer', suffixes=('_old', ''))
+        merged_df = pd.merge(existing_filtered_df, final_df, on='rec_code', how='outer', suffixes=('_old', ''))
         
         # Drop duplicate columns created by merge (keep the new ones)
         for col in ['user_id', 'tx_id', 'event_tstamp', 'event_type', 'event_status', 'currency', 'amount', 'created_at']:
             merged_df[col] = merged_df[col].combine_first(merged_df[col + '_old'])
             merged_df.drop(columns=[col + '_old'], inplace=True)
+        
+        merged_df = pd.concat([out_filtered_df, merged_df], axis=1)
     else:
         merged_df = final_df
 
@@ -196,17 +205,22 @@ def create_fct_system_activity(pivot_date, offset_days, event_file, deposit_file
         
         # If the file exists, filter based on pivot_date and offset_days
         if not existing_df.empty:
-            combined = combined[(combined['event_tstamp'] >= start_date.strftime('%Y-%m-%d')) &
-                                (combined['event_tstamp'] <= pivot_date.strftime('%Y-%m-%d'))]
+            existing_filtered_df = existing_df[(existing_df['event_tstamp'] >= start_date.strftime('%Y-%m-%d')) &
+                                               (existing_df['event_tstamp'] <= pivot_date.strftime('%Y-%m-%d'))]
+            
+            out_filtered_df = existing_df[(existing_df['event_tstamp'] < start_date.strftime('%Y-%m-%d')) |
+                                               (existing_df['event_tstamp'] > pivot_date.strftime('%Y-%m-%d'))]
         
         print("Merging existing data with the new data...")
         # Merge existing data with the new data
-        merged_df = pd.merge(existing_df, final_df, on='rec_code', how='outer', suffixes=('_old', ''))
+        merged_df = pd.merge(existing_filtered_df, final_df, on='rec_code', how='outer', suffixes=('_old', ''))
         
         # Drop duplicate columns created by merge (keep the new ones)
         for col in ['user_id', 'event_id', 'event_tstamp', 'event_type', 'event_status', 'created_at']:
             merged_df[col] = merged_df[col].combine_first(merged_df[col + '_old'])
             merged_df.drop(columns=[col + '_old'], inplace=True)
+
+        merged_df = pd.concat([out_filtered_df, merged_df], axis=1)
     else:
         merged_df = final_df
 
