@@ -109,9 +109,19 @@ def json_to_partitioned_file(books, input_dir = config.SANDBOX_DIR, output_dir =
                 print(f"Writing to: {partitioned_file_path}")
 
                 if format_type == "parquet":
-                    df[df['date'] == date].drop(columns=['date']).to_parquet(partitioned_file_path, index=False)
+                    if os.path.exists(partitioned_file_path):
+                        existing_df = pd.read_parquet(partitioned_file_path)
+                        df_to_write = pd.concat([existing_df, df[df['date'] == date].drop(columns=['date'])])
+                    else:
+                        df_to_write = df[df['date'] == date].drop(columns=['date'])
+                    df_to_write.to_parquet(partitioned_file_path, index=False)
                 elif format_type == "csv":
-                    df[df['date'] == date].drop(columns=['date']).to_csv(partitioned_file_path, index=False)
+                    if os.path.exists(partitioned_file_path):
+                        existing_df = pd.read_csv(partitioned_file_path)
+                        df_to_write = pd.concat([existing_df, df[df['date'] == date].drop(columns=['date'])])
+                    else:
+                        df_to_write = df[df['date'] == date].drop(columns=['date'])
+                    df_to_write.to_csv(partitioned_file_path, index=False)
 
             # Remove processed JSON files
             for file_name in json_files:
