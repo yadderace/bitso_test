@@ -1,18 +1,24 @@
 import requests
 import os
-import zipfile as zf
-import config
-from bitsoauth import BitsoAuth
-from io import BytesIO
 import configparser
+import sys
+import zipfile as zf
+from io import BytesIO
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import src.config as config
+from src.bitsoauth import BitsoAuth
 
 # Create a configparser object
-config = configparser.ConfigParser()
+config_file = configparser.ConfigParser()
+
 # Read the .ini file
-config.read('config.ini')
+config_file_path = os.path.join(os.path.dirname(__file__), 'config.ini')
+config_file.read(config_file_path)
+
 # Accessing values
-api_key = config.get('bitso', 'api_key')
-api_secret = config.get('bitso', 'api_secret')
+api_key = config_file.get('bitso', 'api_key')
+api_secret = config_file.get('bitso', 'api_secret')
 
 auth = BitsoAuth(api_key, api_secret)
 

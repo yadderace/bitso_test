@@ -3,10 +3,13 @@ from airflow.operators.python_operator import PythonOperator
 from datetime import datetime, timedelta
 import asyncio
 import json
+import sys
 import os
-import pandas as pd
-import config
 
+# Add the src directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from src.config import ARG_SLEEP_TIME, ARG_EXECUTION_COUNT, ARG_BOOK_LIST
 from src.challenge1 import process_books, json_to_partitioned_file
 
 # Define default arguments
@@ -22,15 +25,15 @@ default_args = {
 
 # Define the DAG with params
 dag = DAG(
-    'book_processing_dag',
+    'challenge1_dag',
     default_args=default_args,
     description='A DAG to process books every ten minutes',
     schedule_interval='*/10 * * * *',
     catchup=False,
     params={
-        'sleep_time': config.ARG_SLEEP_TIME,  
-        'execution_count': config.ARG_EXECUTION_COUNT, 
-        'book_list': config.ARG_BOOK_LIST 
+        'sleep_time': ARG_SLEEP_TIME,  
+        'execution_count': ARG_EXECUTION_COUNT, 
+        'book_list': ARG_BOOK_LIST 
     }
 )
 
@@ -55,7 +58,8 @@ def process_books_task(**kwargs):
         
     except (ValueError, TypeError, json.JSONDecodeError) as e:
         raise ValueError(f"Invalid parameter format: {e}")
-
+    
+    print(f"Running process_books_task (Sleep Time: {sleep_time}, Execution Count {execution_count}, Book List {books})")
     # Execute the async function
     asyncio.run(run_process_books(books, sleep_time, execution_count))
 

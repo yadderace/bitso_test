@@ -28,5 +28,5 @@ API_ORDER_BOOK = 'https://stage.bitso.com/api/v3/order_book/'
 
 # Parameters Default Values
 ARG_BOOK_LIST = '["btc_mxn", "usd_mxn"]'
-ARG_EXECUTION_COUNT = 600
+ARG_EXECUTION_COUNT = 20
 ARG_SLEEP_TIME = 1

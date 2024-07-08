@@ -1,12 +1,14 @@
 import os
 import json
-import utils
-import config
-import time
-import asyncio
+import sys
 import pandas as pd
-
 from datetime import datetime
+
+# Add the src directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import src.utils as utils
+import src.config as config
+
 
 async def process_books(books, output_dir = config.SANDBOX_DIR):
     """
@@ -19,6 +21,7 @@ async def process_books(books, output_dir = config.SANDBOX_DIR):
     Returns:
         None
     """
+
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok=True)
     
@@ -106,9 +109,9 @@ def json_to_partitioned_file(books, input_dir = config.SANDBOX_DIR, output_dir =
                 print(f"Writing to: {partitioned_file_path}")
 
                 if format_type == "parquet":
-                    df[df['date'] == date].to_parquet(partitioned_file_path, index=False)
+                    df[df['date'] == date].drop(columns=['date']).to_parquet(partitioned_file_path, index=False)
                 elif format_type == "csv":
-                    df[df['date'] == date].to_csv(partitioned_file_path, index=False)
+                    df[df['date'] == date].drop(columns=['date']).to_csv(partitioned_file_path, index=False)
 
             # Remove processed JSON files
             for file_name in json_files:
@@ -118,6 +121,8 @@ def json_to_partitioned_file(books, input_dir = config.SANDBOX_DIR, output_dir =
 
         print(f"Finished processing book: {book}")
 
+
+# Usage Example
 
 # async def main():
 #     for i in range(10):
@@ -129,4 +134,4 @@ def json_to_partitioned_file(books, input_dir = config.SANDBOX_DIR, output_dir =
 # # Run the async main function
 # asyncio.run(main())
 
-json_to_partitioned_file(['btc_mxn', 'usd_mxn'], input_dir='data/sandbox', output_dir='data/s3-partitioned', format_type='parquet')
+# json_to_partitioned_file(['btc_mxn', 'usd_mxn'], input_dir='data/sandbox', output_dir='data/s3-partitioned', format_type='parquet')
