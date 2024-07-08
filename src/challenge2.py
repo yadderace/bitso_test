@@ -1,9 +1,13 @@
-import config
-import utils
 import pandas as pd
 import os
 import hashlib
+import sys
 from datetime import datetime, timedelta
+
+# Add the src directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import src.utils as utils
+import src.config as config
 
 def download_data():
     """
@@ -316,33 +320,36 @@ def zip_directory(input_directory, output_file):
     print('Creating output.zip')
     utils.zip_directory_with_limit(input_directory, output_file, size_limit=(100 * 1024 * 1024))  # 100 MB size limit per zip file
 
-download_data()
 
-pivot_date = "2024-07-01"
-offset_days = 30
-deposit_file = "data/input/deposit_sample_data.csv"
-withdrawals_file = "data/input/withdrawals_sample_data.csv"
-output_file = "data/output/fct_active_users.csv"
+# Usage example
 
-create_fct_active_users(pivot_date, offset_days, deposit_file, withdrawals_file, output_file)
+# download_data()
 
+# pivot_date = "2024-07-01"
+# offset_days = 30
+# deposit_file = "data/input/deposit_sample_data.csv"
+# withdrawals_file = "data/input/withdrawals_sample_data.csv"
+# output_file = "data/output/fct_active_users.csv"
 
-pivot_date = "2024-07-01"
-offset_days = 30
-event_file = "data/input/event_sample_data.csv"
-deposit_file = "data/input/deposit_sample_data.csv"
-withdrawals_file = "data/input/withdrawals_sample_data.csv"
-output_file = "data/output/fct_system_activity.csv"
-
-create_fct_system_activity(pivot_date, offset_days, event_file, deposit_file, withdrawals_file, output_file)
-
-pivot_date = "2024-07-01"
-offset_days = 30
-activity_file = "data/output/fct_system_activity.csv"
-user_id_file = "data/input/user_id_sample_data.csv"
-output_file = "data/output/dim_users.csv"
-
-create_dim_users(pivot_date, offset_days, activity_file, user_id_file, output_file)
+# create_fct_active_users(pivot_date, offset_days, deposit_file, withdrawals_file, output_file)
 
 
-zip_directory('data/output', 'data/zip/output.zip')
+# pivot_date = "2024-07-01"
+# offset_days = 30
+# event_file = "data/input/event_sample_data.csv"
+# deposit_file = "data/input/deposit_sample_data.csv"
+# withdrawals_file = "data/input/withdrawals_sample_data.csv"
+# output_file = "data/output/fct_system_activity.csv"
+
+# create_fct_system_activity(pivot_date, offset_days, event_file, deposit_file, withdrawals_file, output_file)
+
+# pivot_date = "2024-07-01"
+# offset_days = 30
+# activity_file = "data/output/fct_system_activity.csv"
+# user_id_file = "data/input/user_id_sample_data.csv"
+# output_file = "data/output/dim_users.csv"
+
+# create_dim_users(pivot_date, offset_days, activity_file, user_id_file, output_file)
+
+
+# zip_directory('data/output', 'data/zip/output.zip')

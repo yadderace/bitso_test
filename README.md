@@ -49,6 +49,8 @@ Choosing book and date as partitions has several advantages, here are some:
 - Organizing data by book and date makes it easier to manage and maintain. You can easily archive or delete old data based on date partitions, and updates to specific books can be isolated.
 - By partitioning data in S3 (book and date), Redshift Spectrum can efficiently prune partitions that are not relevant to a query, reducing the amount of data scanned and improving query performance.
 
+<img src="documentation/dag_challenge1.png" alt="Data Model" width="500" height="200">
+
 
 ## Files
 
@@ -103,6 +105,8 @@ During each daily run, our pipeline identifies new records from the source syste
 
 - Extract, Transform, Load (ETL) processes can become complex when populating fact and dimension tables. Ensuring data consistency and integrity during the ETL process can be challenging and resource-intensive. In our case, the user dimension calculates some fields based on data that comes from our two fact tables.
 - The Star Schema is often optimized for batch processing and may not be suitable for real-time data ingestion and analysis. Real-time updates to fact and dimension tables can be challenging to implement and maintain.
+
+<img src="documentation/dag_challenge2.png" alt="Data Model" width="500" height="200">
 
 ## Files
 

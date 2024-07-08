@@ -4,8 +4,7 @@ from datetime import datetime, timedelta
 import sys
 import os
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.challenge2 import download_data, create_fct_active_users, create_fct_system_activity, create_dim_users
 
 # Define default arguments
@@ -21,7 +20,7 @@ default_args = {
 
 # Define the DAG
 with DAG(
-    'daily_data_processing',
+    'challenge2_dag',
     default_args=default_args,
     description='A simple data processing DAG',
     schedule_interval=timedelta(days=1),
