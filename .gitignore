@@ -163,8 +163,9 @@ cython_debug/
 #.idea/
 
 # Data Stored
-data/input/*
-data/output/*
+data/input/*.csv
+data/input/__MACOSX
+data/output/*.csv
 data/sandbox/*
 
 # Configuration file
